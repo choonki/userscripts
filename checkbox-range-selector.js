@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         체크박스 범위 선택기 (Checkbox Range Selector)
-// @namespace    http://tampermonkey.net/
-// @version      1.4
+// @namespace    https://github.com/choonki
+// @version      1.5
 // @description  웹 페이지 내의 체크박스를 특정 범위 또는 갯수로 지정하거나 전체 일괄 선택/해제합니다.
 // @match        *://*/*
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/choonki/userscripts/main/checkbox-range-selector.js
+// @downloadURL  https://raw.githubusercontent.com/choonki/userscripts/main/checkbox-range-selector.js
 // ==/UserScript==
 
 (function() {
