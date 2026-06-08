@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         체크박스 범위 선택기 (Checkbox Range Selector)
 // @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  웹 페이지 내의 체크박스를 특정 범위로 지정하여 일괄 선택/해제합니다. (첫 번째 체크박스 제외 기능 추가)
+// @version      1.4
+// @description  웹 페이지 내의 체크박스를 특정 범위 또는 갯수로 지정하거나 전체 일괄 선택/해제합니다.
 // @match        *://*/*
 // @grant        none
 // ==/UserScript==
@@ -38,73 +38,138 @@
     panel.style.fontSize = '13px';
     panel.style.color = '#333';
 
-    // 패널 내부 HTML 구성 (첫 번째 제외 옵션 추가)
+    // 패널 내부 HTML 구성 (전체 선택/해제 버튼 추가)
     panel.innerHTML = `
         <div style="margin-bottom: 8px; font-weight: bold; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
             ☑️ 체크박스 제어
         </div>
-        <div style="margin-bottom: 8px;">
+        <div style="margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px;">
             <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
                 <input type="checkbox" id="cb-exclude-first" checked>
                 첫 번째 체크박스 제외 (전체선택 등)
             </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="cb-clear-before" checked>
+                범위 실행 전 기존 선택 모두 해제
+            </label>
+        </div>
+        <div style="margin-bottom: 8px; font-size: 12px;">
+            <label style="cursor: pointer;"><input type="radio" name="cb-mode" value="range" checked> 범위 (시작~끝)</label>
+            <label style="cursor: pointer; margin-left: 8px;"><input type="radio" name="cb-mode" value="count"> 갯수 (시작~N개)</label>
         </div>
         <div style="margin-bottom: 8px;">
             <label for="cb-start">시작: </label>
             <input type="number" id="cb-start" style="width: 50px; padding: 2px;" min="1" value="1">
-            <label for="cb-end" style="margin-left: 5px;">끝: </label>
-            <input type="number" id="cb-end" style="width: 50px; padding: 2px;" min="1" value="10">
+            <label for="cb-val2" id="cb-val2-label" style="margin-left: 5px;">끝: </label>
+            <input type="number" id="cb-val2" style="width: 50px; padding: 2px;" min="1" value="10">
+        </div>
+        <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+            <button id="cb-check" style="flex: 1; cursor: pointer; padding: 4px; background: #4CAF50; color: white; border: none; border-radius: 4px;">범위 선택</button>
+            <button id="cb-uncheck" style="flex: 1; cursor: pointer; padding: 4px; background: #f44336; color: white; border: none; border-radius: 4px;">범위 해제</button>
         </div>
         <div style="display: flex; gap: 5px;">
-            <button id="cb-check" style="flex: 1; cursor: pointer; padding: 4px; background: #4CAF50; color: white; border: none; border-radius: 4px;">선택</button>
-            <button id="cb-uncheck" style="flex: 1; cursor: pointer; padding: 4px; background: #f44336; color: white; border: none; border-radius: 4px;">해제</button>
+            <button id="cb-check-all" style="flex: 1; cursor: pointer; padding: 4px; background: #2196F3; color: white; border: none; border-radius: 4px;">전체 선택</button>
+            <button id="cb-uncheck-all" style="flex: 1; cursor: pointer; padding: 4px; background: #9E9E9E; color: white; border: none; border-radius: 4px;">전체 해제</button>
         </div>
     `;
 
     document.body.appendChild(panel);
 
-    // 2. 체크박스 제어 로직
-    function toggleCheckboxes(check) {
-        // 스크립트 UI에 있는 체크박스(#cb-exclude-first)는 제외하고 페이지 내의 모든 체크박스를 배열로 가져옵니다.
-        let checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]:not(#cb-exclude-first)'));
+    // 라디오 버튼 변경 시 라벨 텍스트 변경 이벤트
+    const modeRadios = document.querySelectorAll('input[name="cb-mode"]');
+    const val2Label = document.getElementById('cb-val2-label');
+    
+    modeRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (e.target.value === 'range') {
+                val2Label.textContent = '끝: ';
+            } else {
+                val2Label.textContent = '갯수: ';
+            }
+        });
+    });
 
-        // '첫 번째 체크박스 제외' 옵션이 켜져 있다면 배열의 첫 번째 요소를 제거합니다.
+    // --- 공통 헬퍼 함수 ---
+
+    // 제어 대상이 되는 체크박스 목록을 가져오는 함수 (UI 패널 제외 & 첫 번째 제외 옵션 적용)
+    function getTargetCheckboxes() {
+        let checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(cb => !panel.contains(cb));
         const excludeFirst = document.getElementById('cb-exclude-first').checked;
         if (excludeFirst && checkboxes.length > 0) {
             checkboxes.shift();
         }
+        return checkboxes;
+    }
 
-        // 사용자는 1부터 숫자를 세지만, 자바스크립트 배열은 0부터 시작하므로 -1을 해줍니다.
+    // 체크박스 상태를 안전하게 변경하는 함수 (프레임워크 호환 이벤트 발생)
+    function changeState(cb, targetState) {
+        if (cb.checked !== targetState) {
+            cb.checked = targetState;
+            cb.dispatchEvent(new Event('change', { bubbles: true }));
+            cb.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        }
+    }
+
+    // 2. 체크박스 범위 제어 로직
+    function toggleRangeCheckboxes(check) {
+        const checkboxes = getTargetCheckboxes();
+        const mode = document.querySelector('input[name="cb-mode"]:checked').value;
         const start = parseInt(document.getElementById('cb-start').value, 10) - 1;
-        const end = parseInt(document.getElementById('cb-end').value, 10) - 1;
+        const val2 = parseInt(document.getElementById('cb-val2').value, 10);
+        
+        let end;
 
-        if (isNaN(start) || isNaN(end) || start < 0 || start > end) {
-            alert('올바른 범위를 입력하세요. (시작 번호는 끝 번호보다 작거나 같아야 합니다)');
+        if (isNaN(start) || isNaN(val2) || start < 0 || val2 < 1) {
+            alert('올바른 값을 입력하세요.');
             return;
         }
 
+        if (mode === 'range') {
+            end = val2 - 1;
+            if (start > end) {
+                alert('범위 지정 오류: 시작 번호는 끝 번호보다 작거나 같아야 합니다.');
+                return;
+            }
+        } else if (mode === 'count') {
+            end = start + val2 - 1;
+        }
+
+        // 실행 전 기존 선택 모두 해제 옵션
+        const clearBefore = document.getElementById('cb-clear-before').checked;
+        if (clearBefore) {
+            checkboxes.forEach(cb => changeState(cb, false));
+        }
+
         let count = 0;
-        // 지정된 범위만큼 반복하며 체크 상태 변경
         for (let i = start; i <= end; i++) {
             if (checkboxes[i]) {
-                if (checkboxes[i].checked !== check) {
-                    checkboxes[i].checked = check;
-
-                    // React, Vue 등 프레임워크 호환성을 위한 이벤트 강제 발생
-                    checkboxes[i].dispatchEvent(new Event('change', { bubbles: true }));
-                    checkboxes[i].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                }
+                changeState(checkboxes[i], check);
                 count++;
             }
         }
 
-        // 시각적 피드백
         const actionText = check ? '선택' : '해제';
-        console.log(`[체크박스 선택기] ${count}개의 체크박스가 ${actionText} 되었습니다.`);
+        console.log(`[체크박스 선택기] 지정 범위 내 ${count}개의 요소가 ${actionText} 되었습니다.`);
     }
 
-    // 3. 버튼에 이벤트 리스너 연결
-    document.getElementById('cb-check').addEventListener('click', () => toggleCheckboxes(true));
-    document.getElementById('cb-uncheck').addEventListener('click', () => toggleCheckboxes(false));
+    // 3. 체크박스 전체 제어 로직
+    function toggleAllCheckboxes(check) {
+        const checkboxes = getTargetCheckboxes();
+        let count = 0;
+        
+        checkboxes.forEach(cb => {
+            changeState(cb, check);
+            count++;
+        });
+
+        const actionText = check ? '전체 선택' : '전체 해제';
+        console.log(`[체크박스 선택기] ${count}개의 요소가 ${actionText} 되었습니다.`);
+    }
+
+    // 4. 버튼에 이벤트 리스너 연결
+    document.getElementById('cb-check').addEventListener('click', () => toggleRangeCheckboxes(true));
+    document.getElementById('cb-uncheck').addEventListener('click', () => toggleRangeCheckboxes(false));
+    document.getElementById('cb-check-all').addEventListener('click', () => toggleAllCheckboxes(true));
+    document.getElementById('cb-uncheck-all').addEventListener('click', () => toggleAllCheckboxes(false));
 
 })();
