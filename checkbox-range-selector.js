@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         체크박스 범위 선택기 (Checkbox Range Selector)
 // @namespace    https://github.com/choonki
-// @version      1.5
+// @version      1.6
 // @description  웹 페이지 내의 체크박스를 특정 범위 또는 갯수로 지정하거나 전체 일괄 선택/해제합니다.
 // @match        *://*/*
 // @grant        none
@@ -56,8 +56,8 @@
             </label>
         </div>
         <div style="margin-bottom: 8px; font-size: 12px;">
-            <label style="cursor: pointer;"><input type="radio" name="cb-mode" value="range" checked> 범위 (시작~끝)</label>
-            <label style="cursor: pointer; margin-left: 8px;"><input type="radio" name="cb-mode" value="count"> 갯수 (시작~N개)</label>
+            <label style="cursor: pointer;"><input type="radio" name="cb-mode" value="range"> 범위 (시작~끝)</label>
+            <label style="cursor: pointer; margin-left: 8px;"><input type="radio" name="cb-mode" value="count" checked> 갯수 (시작~N개)</label>
         </div>
         <div style="margin-bottom: 8px;">
             <label for="cb-start">시작: </label>
