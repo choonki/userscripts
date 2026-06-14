@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         체크박스 범위 선택기 (Checkbox Range Selector)
 // @namespace    https://github.com/choonki
-// @version      1.6
+// @version      1.7
 // @description  웹 페이지 내의 체크박스를 특정 범위 또는 갯수로 지정하거나 전체 일괄 선택/해제합니다.
 // @match        *://*/*
 // @grant        none
@@ -15,7 +15,7 @@
     // 매칭하고 싶은 URL 정규식 패턴들을 배열로 정의
     const targetPatterns = [
         // 뉴토끼 게시판의 글
-        /^https:\/\/sbxh\d+\.com\/[a-zA-Z0-9_-]+-board\/\d+\/?$/
+        /^https:\/\/sbxh\d+\.com\/[a-zA-Z0-9_-]+-board\/\d+.*$/
     ];
 
     // 현재 URL이 배열 안의 패턴 중 하나라도 일치하는지 검사
